@@ -1,0 +1,110 @@
+name: Visual regression
+
+# Screenshot baselines are rendered per operating system: fonts, antialiasing and scrollbar
+# metrics all differ between Windows, macOS and Linux. A baseline committed from a laptop can
+# therefore never match an Ubuntu runner, which is why the main CI workflow skips @visual and
+# this one owns it end to end.
+#
+# First run on a branch with no Linux baselines generates and commits them. Every run after that
+# verifies against them, so the check is a real regression gate rather than a rubber stamp.
+# Use the "refresh" input after an intentional UI change.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/public/**'
+      - 'tests/ui/accessibility-visual.spec.ts'
+      - 'playwright.config.ts'
+      - '.github/workflows/visual.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/public/**'
+      - 'tests/ui/accessibility-visual.spec.ts'
+      - 'playwright.config.ts'
+  workflow_dispatch:
+    inputs:
+      refresh:
+        description: Regenerate every baseline from the current UI (use after an intended change)
+        type: boolean
+        default: false
+
+concurrency:
+  group: visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    name: Visual baselines (chromium / linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # A real token is needed so a baseline commit can be pushed back to the branch.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Only chromium: one engine is the authoritative baseline. Maintaining three sets of
+      # screenshots costs triple the review effort and finds no extra defects.
+      - run: npx playwright install --with-deps chromium
+
+      - name: Verify, or bootstrap the baselines if this platform has none
+        id: visual
+        run: |
+          set -euo pipefail
+          SNAPDIR="tests/ui/accessibility-visual.spec.ts-snapshots"
+
+          if [ "${{ inputs.refresh }}" = "true" ]; then
+            echo "Refresh requested: regenerating every Linux baseline."
+            NEEDS_UPDATE=1
+          elif ls "$SNAPDIR"/*-chromium-linux.png >/dev/null 2>&1; then
+            echo "Linux baselines found: verifying against them."
+            NEEDS_UPDATE=0
+          else
+            echo "No Linux baselines in $SNAPDIR: generating them on this runner."
+            NEEDS_UPDATE=1
+          fi
+
+          if [ "$NEEDS_UPDATE" = "1" ]; then
+            npx playwright test --project=chromium --grep @visual --update-snapshots
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          else
+            npx playwright test --project=chromium --grep @visual
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit the baselines
+        if: steps.visual.outputs.updated == 'true' && github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A "tests/ui/accessibility-visual.spec.ts-snapshots"
+          if git diff --cached --quiet; then
+            echo "Baselines were already up to date; nothing to commit."
+          else
+            git commit -m "test(visual): refresh Linux screenshot baselines from the CI runner"
+            git push
+          fi
+
+      # On a pull request the baselines are not committed; the diff is published instead so a
+      # reviewer can decide whether the change was intended.
+      - name: Upload diffs and report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: visual-report
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14

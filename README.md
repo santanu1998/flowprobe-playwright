@@ -103,7 +103,7 @@ npm run test:smoke              # merge gate
 npm run test:regression         # full functional set
 npm run test:iot                # telemetry ingest and alerting
 npm run test:a11y               # WCAG 2.1 AA
-npm run test:visual             # pixel baselines
+npm run test:visual             # pixel baselines (against this platform's baselines)
 npm run test:mobile             # Pixel 7 viewport
 
 npm run report                  # open the HTML report
@@ -157,6 +157,26 @@ refactor **without** losing the signal that a selector needs updating:
 
 A test in the suite deliberately removes the attribute to prove this path works.
 
+### Visual baselines belong to the platform that verifies them
+
+Screenshot baselines are rendered per operating system — fonts, antialiasing and scrollbar metrics
+all differ. A baseline committed from a Windows laptop can never match an Ubuntu CI runner, and
+`login-chromium-win32.png` is simply not the file `login-chromium-linux.png` that Linux looks for.
+
+So the two concerns are split:
+
+- **`ci.yml` skips `@visual`** (`--grep-invert @visual`) and owns everything else.
+- **`visual.yml` owns `@visual` end to end**, on `ubuntu-latest`. Its first run on a branch with no
+  Linux baselines generates and commits them; every run afterwards verifies against them. After an
+  intentional UI change, run it with the **refresh** input to regenerate.
+
+On a pull request it never commits — it publishes the diff as an artifact so a human decides whether
+the change was intended. Only `chromium` is baselined: three engines would cost triple the review
+effort and find no extra defects.
+
+The responsive check is deliberately *not* `@visual`. It measures `scrollWidth` against
+`clientWidth` rather than comparing pixels, so it needs no baseline and runs on every engine.
+
 ### Retries that cannot hide a defect
 
 One retry in CI, zero locally. A retried test is reported as **flaky**, not as passing. Triage then
@@ -196,8 +216,9 @@ pipeline acts on.
 All three pipelines run the same stages: **static analysis → API gate → browser matrix → Postman →
 triage**.
 
-- **GitHub Actions** — types, lint and `npm audit` first; API project as the fast gate; a four-way
-  browser matrix; the triage summary posted as a sticky PR comment.
+- **GitHub Actions** — `ci.yml` runs types, lint and `npm audit` first, then the API project as the
+  fast gate, then a four-way browser matrix, and posts the triage summary as a sticky PR comment.
+  `visual.yml` owns the screenshot baselines separately, on the runner that verifies them.
 - **Azure DevOps** — the same stages with results published to Azure Test Plans.
 - **Jenkins** — parameterised declarative pipeline for teams on self-hosted agents.
 

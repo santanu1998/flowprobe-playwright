@@ -25,10 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run typecheck
@@ -43,16 +43,16 @@ jobs:
     needs: static-analysis
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Run API project
         run: npx playwright test --project=api
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: results-api
@@ -70,18 +70,23 @@ jobs:
       matrix:
         project: [chromium, firefox, webkit, mobile-chrome]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps
+      # @visual is excluded here and owned by visual.yml. Screenshot baselines are rendered
+      # per operating system, so a baseline committed from a developer's machine can never match
+      # a Linux runner. visual.yml generates them on the runner itself, which is the only
+      # environment whose rendering is guaranteed to match the one doing the verifying.
       - name: Run ${{ matrix.project }}
         run: >
           npx playwright test --project=${{ matrix.project }}
+          --grep-invert @visual
           ${{ github.event_name == 'pull_request' && '--grep @smoke' || '' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: results-${{ matrix.project }}
@@ -97,10 +102,10 @@ jobs:
     needs: static-analysis
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: Boot the application under test
@@ -112,7 +117,7 @@ jobs:
           npx newman run postman/FlowProbe_Fleet_API.postman_collection.json
           -e postman/local.postman_environment.json
           --reporters cli,junit --reporter-junit-export test-results/newman.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: results-newman
@@ -128,11 +133,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
-      - uses: actions/download-artifact@v4
+          node-version: 22
+      - uses: actions/download-artifact@v5
         with:
           pattern: results-*
           merge-multiple: true
@@ -147,7 +152,7 @@ jobs:
         with:
           path: test-results/triage.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: triage
           path: test-results/triage.*

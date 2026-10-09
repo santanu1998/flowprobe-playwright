@@ -83,6 +83,13 @@ test.describe('Visual regression @visual @regression', () => {
     await expect(page.locator('.summary')).toHaveScreenshot('fleet-summary.png');
   });
 
+});
+
+/**
+ * Not tagged @visual: this asserts a measured layout property rather than comparing pixels, so it
+ * needs no baseline and runs on every engine in the main pipeline.
+ */
+test.describe('Responsive layout @regression', () => {
   test('the console renders correctly at phone width', async ({ console: fleetConsole, page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await fleetConsole.waitUntilLoaded();
