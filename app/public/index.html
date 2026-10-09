@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlowProbe Fleet Console</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📡</text></svg>" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <!-- ------------------------------------------------------------ login -->
+  <main id="login-view" class="centered" data-test="login-view">
+    <form id="login-form" class="card login-card" data-test="login-form" novalidate>
+      <h1 class="brand">FlowProbe</h1>
+      <p class="muted">Device Fleet Console</p>
+
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username"
+             data-test="username" required />
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password"
+             data-test="password" required />
+
+      <button type="submit" data-test="login-submit">Sign in</button>
+
+      <p id="login-error" class="error" role="alert" data-test="login-error" hidden></p>
+
+      <details class="hint">
+        <summary>Demo accounts</summary>
+        <ul>
+          <li><code>admin / Admin@123</code> — full control</li>
+          <li><code>operator / Operator@123</code> — commands and edits</li>
+          <li><code>viewer / Viewer@123</code> — read only</li>
+        </ul>
+      </details>
+    </form>
+  </main>
+
+  <!-- ------------------------------------------------------------ console -->
+  <div id="console-view" data-test="console-view" hidden>
+
+    <header class="topbar">
+      <span class="brand small">FlowProbe</span>
+      <nav aria-label="Primary">
+        <button class="tab is-active" data-test="tab-fleet" data-view="fleet">Fleet</button>
+        <button class="tab" data-test="tab-alerts" data-view="alerts">
+          Alerts <span class="pill" data-test="alert-count">0</span>
+        </button>
+      </nav>
+      <div class="spacer"></div>
+      <span class="who" data-test="current-user"></span>
+      <button class="ghost" data-test="logout">Sign out</button>
+    </header>
+
+    <!-- summary -->
+    <section class="summary" aria-label="Fleet summary">
+      <div class="stat" data-test="stat-total"><span class="n">–</span><span class="l">Devices</span></div>
+      <div class="stat ok" data-test="stat-online"><span class="n">–</span><span class="l">Online</span></div>
+      <div class="stat warn" data-test="stat-degraded"><span class="n">–</span><span class="l">Degraded</span></div>
+      <div class="stat bad" data-test="stat-offline"><span class="n">–</span><span class="l">Offline</span></div>
+      <div class="stat bad" data-test="stat-alerts"><span class="n">–</span><span class="l">Open alerts</span></div>
+    </section>
+
+    <!-- fleet -->
+    <section id="fleet-panel" data-test="fleet-panel">
+      <div class="filters">
+        <label for="filter-search">Search</label>
+        <input id="filter-search" type="search" placeholder="Device name" data-test="filter-search" />
+
+        <label for="filter-site">Site</label>
+        <select id="filter-site" data-test="filter-site"><option value="">All sites</option></select>
+
+        <label for="filter-status">Status</label>
+        <select id="filter-status" data-test="filter-status">
+          <option value="">All statuses</option>
+          <option value="online">Online</option>
+          <option value="degraded">Degraded</option>
+          <option value="offline">Offline</option>
+        </select>
+
+        <button class="ghost" data-test="filter-clear">Clear</button>
+      </div>
+
+      <table class="grid" data-test="device-table">
+        <caption class="sr-only">Devices in the fleet</caption>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Type</th>
+            <th scope="col">Site</th>
+            <th scope="col">Firmware</th>
+            <th scope="col">Battery</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody data-test="device-rows"></tbody>
+      </table>
+
+      <p class="empty" data-test="no-devices" hidden>No devices match these filters.</p>
+      <p class="muted" data-test="result-count"></p>
+    </section>
+
+    <!-- alerts -->
+    <section id="alerts-panel" data-test="alerts-panel" hidden>
+      <table class="grid" data-test="alert-table">
+        <caption class="sr-only">Open alerts</caption>
+        <thead>
+          <tr>
+            <th scope="col">Severity</th>
+            <th scope="col">Device</th>
+            <th scope="col">Code</th>
+            <th scope="col">Message</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody data-test="alert-rows"></tbody>
+      </table>
+      <p class="empty" data-test="no-alerts" hidden>No open alerts.</p>
+    </section>
+
+    <!-- device drawer -->
+    <aside id="drawer" class="drawer" data-test="device-drawer" hidden aria-label="Device detail">
+      <header>
+        <h2 data-test="drawer-title"></h2>
+        <button class="ghost" data-test="drawer-close" aria-label="Close device detail">×</button>
+      </header>
+
+      <dl class="kv">
+        <dt>Type</dt><dd data-test="drawer-type"></dd>
+        <dt>Site</dt><dd data-test="drawer-site"></dd>
+        <dt>Firmware</dt><dd data-test="drawer-firmware"></dd>
+        <dt>Battery</dt><dd data-test="drawer-battery"></dd>
+        <dt>Status</dt><dd data-test="drawer-status"></dd>
+        <dt>Last seen</dt><dd data-test="drawer-lastseen"></dd>
+      </dl>
+
+      <h3>Live telemetry</h3>
+      <table class="grid compact" data-test="telemetry-table">
+        <thead>
+          <tr><th scope="col">Time</th><th scope="col">Temp °C</th><th scope="col">Humidity %</th><th scope="col">Signal dBm</th></tr>
+        </thead>
+        <tbody data-test="telemetry-rows"></tbody>
+      </table>
+
+      <h3>Commands</h3>
+      <div class="actions">
+        <button data-test="cmd-reboot" data-command="reboot">Reboot</button>
+        <button data-test="cmd-sync" data-command="sync-firmware">Sync firmware</button>
+        <button data-test="cmd-diagnostics" data-command="run-diagnostics">Run diagnostics</button>
+      </div>
+      <p class="notice" role="status" data-test="command-result" hidden></p>
+    </aside>
+
+    <div id="toast" class="toast" role="status" data-test="toast" hidden></div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

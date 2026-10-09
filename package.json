@@ -1,0 +1,40 @@
+{
+  "name": "flowprobe-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end, API and IoT telemetry test automation for a cloud device-fleet console. Playwright + TypeScript.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "app": "node app/server.js",
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep @smoke",
+    "test:regression": "playwright test --grep @regression",
+    "test:api": "playwright test --project=api",
+    "test:ui": "playwright test --project=chromium",
+    "test:iot": "playwright test --grep @iot",
+    "test:a11y": "playwright test --grep @a11y",
+    "test:visual": "playwright test --grep @visual",
+    "test:visual:update": "playwright test --grep @visual --update-snapshots",
+    "test:mobile": "playwright test --project=mobile-chrome",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "report": "playwright show-report",
+    "triage": "node tools/triage.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "newman": "newman run postman/FlowProbe_Fleet_API.postman_collection.json -e postman/local.postman_environment.json"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.64.0",
+    "@types/node": "26.6.4",
+    "@typescript-eslint/eslint-plugin": "8.71.1",
+    "@typescript-eslint/parser": "8.71.1",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3"
+  }
+}

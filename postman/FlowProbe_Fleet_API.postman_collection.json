@@ -1,0 +1,385 @@
+{
+  "info": {
+    "_postman_id": "c4a2f1d8-6b3e-4f12-9a77-1e5b8d0c3a92",
+    "name": "FlowProbe — Fleet API",
+    "description": "Functional, authorisation and negative coverage for the device fleet API. Runs in the Postman app for exploratory work and headless in CI through Newman.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 — Health",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Reports UP', () => pm.expect(pm.response.json().status).to.eql('UP'));",
+                  "pm.test('Responds inside the SLA', () => pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get('slaMillis'))));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/health", "host": ["{{baseUrl}}"], "path": ["api", "health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 — Authentication",
+      "item": [
+        {
+          "name": "POST /api/auth/login — admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('adminToken', body.token);",
+                  "pm.test('Returns a token and the signed-in user', () => {",
+                  "  pm.expect(body.token).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.user.role).to.eql('admin');",
+                  "});",
+                  "pm.test('Token expiry is in the future', () => {",
+                  "  pm.expect(new Date(body.expiresAt).getTime()).to.be.above(Date.now());",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"{{adminPassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /api/auth/login — viewer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('viewerToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"viewer\",\n  \"password\": \"{{viewerPassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /api/auth/login — wrong password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('No token is leaked', () => pm.expect(pm.response.text()).to.not.include('token'));",
+                  "pm.test('Message does not reveal which field was wrong', () => {",
+                  "  pm.expect(pm.response.json().error.message).to.eql('Invalid username or password');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"not-the-password\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /api/auth/login — locked account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 423 Locked', () => pm.response.to.have.status(423));",
+                  "pm.test('Message is actionable', () => pm.expect(pm.response.json().error.message).to.include('locked'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"locked\",\n  \"password\": \"Locked@123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 — Fleet and devices",
+      "item": [
+        {
+          "name": "GET /api/fleet/summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const s = pm.response.json();",
+                  "pm.test('Matches the summary schema', () => {",
+                  "  pm.response.to.have.jsonSchema({",
+                  "    type: 'object',",
+                  "    required: ['total', 'online', 'degraded', 'offline', 'openAlerts', 'sites', 'types'],",
+                  "    properties: {",
+                  "      total: { type: 'integer', minimum: 0 },",
+                  "      openAlerts: { type: 'integer', minimum: 0 },",
+                  "      sites: { type: 'array', items: { type: 'string' } }",
+                  "    }",
+                  "  });",
+                  "});",
+                  "pm.test('Status counts add up to the total', () => {",
+                  "  pm.expect(s.online + s.degraded + s.offline).to.eql(s.total);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/fleet/summary", "host": ["{{baseUrl}}"], "path": ["api", "fleet", "summary"] }
+          }
+        },
+        {
+          "name": "POST /api/devices — register",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('deviceName', 'PM-' + Date.now());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 201 Created', () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json();",
+                  "pm.collectionVariables.set('deviceId', d.id);",
+                  "pm.test('Every submitted field round-trips', () => {",
+                  "  pm.expect(d.name).to.eql(pm.collectionVariables.get('deviceName'));",
+                  "  pm.expect(d.type).to.eql('sensor');",
+                  "  pm.expect(d.site).to.eql('Pune-Edge');",
+                  "  pm.expect(d.batteryPct).to.eql(88);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{deviceName}}\",\n  \"type\": \"sensor\",\n  \"site\": \"Pune-Edge\",\n  \"firmware\": \"3.2.1\",\n  \"batteryPct\": 88\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/devices", "host": ["{{baseUrl}}"], "path": ["api", "devices"] }
+          }
+        },
+        {
+          "name": "PATCH /api/devices/{id} — partial update",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json();",
+                  "pm.test('Named field changed', () => pm.expect(d.firmware).to.eql('4.0.0-rc1'));",
+                  "pm.test('Untouched fields survived', () => {",
+                  "  pm.expect(d.batteryPct).to.eql(88);",
+                  "  pm.expect(d.name).to.eql(pm.collectionVariables.get('deviceName'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"firmware\": \"4.0.0-rc1\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/devices/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "devices", "{{deviceId}}"]
+            }
+          }
+        },
+        {
+          "name": "POST /api/devices — invalid payload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "const fields = pm.response.json().error.errors.map(e => e.field);",
+                  "pm.test('Every offending field is named', () => {",
+                  "  pm.expect(fields).to.include.members(['name', 'type', 'site']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"ab\",\n  \"type\": \"toaster\",\n  \"site\": \"Mars-Base\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/devices", "host": ["{{baseUrl}}"], "path": ["api", "devices"] }
+          }
+        },
+        {
+          "name": "DELETE /api/devices/{id} — as viewer (must be refused)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('The required role is named', () => pm.expect(pm.response.json().error.message).to.include('admin'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{viewerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "devices", "{{deviceId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/devices/{id} — as admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Status is 204 No Content', () => pm.response.to.have.status(204));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "devices", "{{deviceId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET /api/devices/{id} — confirm removal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Status is 404', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/devices/{{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "devices", "{{deviceId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 — Alerts",
+      "item": [
+        {
+          "name": "GET /api/alerts — open only",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().items;",
+                  "pm.test('The filter is honoured', () => {",
+                  "  pm.expect(items.every(a => a.acknowledged === false)).to.be.true;",
+                  "});",
+                  "pm.test('Newest alert first', () => {",
+                  "  const raised = items.map(a => a.raisedAt);",
+                  "  pm.expect(raised).to.eql([...raised].sort().reverse());",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/alerts?acknowledged=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "alerts"],
+              "query": [{ "key": "acknowledged", "value": "false" }]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "adminToken", "value": "" },
+    { "key": "viewerToken", "value": "" },
+    { "key": "deviceId", "value": "" },
+    { "key": "deviceName", "value": "" }
+  ]
+}

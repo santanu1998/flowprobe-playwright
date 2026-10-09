@@ -1,0 +1,103 @@
+# FlowProbe — Azure DevOps pipeline
+# Same stages as the GitHub Actions workflow, so a team can run either without touching a test.
+
+trigger:
+  branches:
+    include: [main, develop]
+
+schedules:
+  - cron: '0 2 * * *'
+    displayName: Nightly regression
+    branches:
+      include: [main]
+    always: true
+
+parameters:
+  - name: tagFilter
+    displayName: Tag filter
+    type: string
+    default: '@regression'
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: Static
+    displayName: Static analysis
+    jobs:
+      - job: TypesAndLint
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '20.x' }
+          - script: npm ci
+            displayName: Install
+          - script: npm run typecheck
+            displayName: Type check
+          - script: npm run lint
+            displayName: Lint
+          - script: npm audit --audit-level=high
+            displayName: Dependency advisories
+
+  - stage: Verify
+    displayName: Functional verification
+    dependsOn: Static
+    jobs:
+      - job: Api
+        displayName: API suite
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '20.x' }
+          - script: npm ci && npx playwright install --with-deps chromium
+            displayName: Install
+          - script: npx playwright test --project=api
+            displayName: API project
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: test-results/junit.xml
+              testRunTitle: API suite
+
+      - job: Ui
+        displayName: UI suite
+        dependsOn: Api
+        strategy:
+          matrix:
+            chromium: { projectName: chromium }
+            firefox: { projectName: firefox }
+            webkit: { projectName: webkit }
+            mobile: { projectName: mobile-chrome }
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '20.x' }
+          - script: npm ci && npx playwright install --with-deps
+            displayName: Install
+          - script: npx playwright test --project=$(projectName) --grep ${{ parameters.tagFilter }}
+            displayName: Run $(projectName)
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: test-results/junit.xml
+              testRunTitle: UI suite — $(projectName)
+          - task: PublishPipelineArtifact@1
+            condition: always()
+            inputs:
+              targetPath: playwright-report
+              artifact: report-$(projectName)
+
+  - stage: Triage
+    displayName: Failure triage
+    dependsOn: Verify
+    condition: always()
+    jobs:
+      - job: Classify
+        steps:
+          - task: NodeTool@0
+            inputs: { versionSpec: '20.x' }
+          - script: node tools/triage.js
+            displayName: Classify failures
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: test-results
+              artifact: triage
